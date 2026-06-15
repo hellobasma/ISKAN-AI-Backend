@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pydantic
+python-multipart
+pandas
+scikit-learn
+ultralytics
+deepface
+easyocr
+opencv-python-headless
+numpy
+Pillow
+pypdfium2

@@ -1,0 +1,487 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "ISKAN AI Microservice API Gateway",
+        "version": "0.1.0"
+    },
+    "paths": {
+        "/api/recommend": {
+            "post": {
+                "summary": "Recommend",
+                "operationId": "recommend_api_recommend_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RecommenderRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/RecommenderResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/verify-identity": {
+            "post": {
+                "summary": "Verify Identity",
+                "operationId": "verify_identity_api_verify_identity_post",
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Body_verify_identity_api_verify_identity_post"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/IdentityResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/validate-property": {
+            "post": {
+                "summary": "Validate Property",
+                "operationId": "validate_property_api_validate_property_post",
+                "requestBody": {
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/Body_validate_property_api_validate_property_post"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PropertyValidationResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/admin-oversight": {
+            "post": {
+                "summary": "Admin Oversight",
+                "operationId": "admin_oversight_api_admin_oversight_post",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/AdminOversightRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "Successful Response",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/AdminOversightResponse"
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "description": "Validation Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/HTTPValidationError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "AdminOversightRequest": {
+                "properties": {
+                    "m2_data": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "M2 Data"
+                    },
+                    "m3_data": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "M3 Data"
+                    },
+                    "listing_id": {
+                        "type": "string",
+                        "title": "Listing Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "m2_data",
+                    "m3_data",
+                    "listing_id"
+                ],
+                "title": "AdminOversightRequest"
+            },
+            "AdminOversightResponse": {
+                "properties": {
+                    "listing_id": {
+                        "type": "string",
+                        "title": "Listing Id"
+                    },
+                    "owner_trust_score": {
+                        "$ref": "#/components/schemas/TrustScore"
+                    },
+                    "ai_image_analysis": {
+                        "items": {
+                            "$ref": "#/components/schemas/ImageAnalysis"
+                        },
+                        "type": "array",
+                        "title": "Ai Image Analysis"
+                    },
+                    "dashboard_notifications": {
+                        "items": {
+                            "$ref": "#/components/schemas/Notification"
+                        },
+                        "type": "array",
+                        "title": "Dashboard Notifications"
+                    },
+                    "reports_and_complaints": {
+                        "$ref": "#/components/schemas/Report"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "listing_id",
+                    "owner_trust_score",
+                    "ai_image_analysis",
+                    "dashboard_notifications",
+                    "reports_and_complaints"
+                ],
+                "title": "AdminOversightResponse"
+            },
+            "Body_validate_property_api_validate_property_post": {
+                "properties": {
+                    "contract_file": {
+                        "type": "string",
+                        "format": "binary",
+                        "title": "Contract File"
+                    },
+                    "property_images": {
+                        "items": {
+                            "type": "string",
+                            "format": "binary"
+                        },
+                        "type": "array",
+                        "title": "Property Images"
+                    },
+                    "verified_owner_national_id": {
+                        "type": "string",
+                        "title": "Verified Owner National Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "contract_file",
+                    "property_images",
+                    "verified_owner_national_id"
+                ],
+                "title": "Body_validate_property_api_validate_property_post"
+            },
+            "Body_verify_identity_api_verify_identity_post": {
+                "properties": {
+                    "id_image": {
+                        "type": "string",
+                        "format": "binary",
+                        "title": "Id Image"
+                    },
+                    "selfie_image": {
+                        "type": "string",
+                        "format": "binary",
+                        "title": "Selfie Image"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "id_image",
+                    "selfie_image"
+                ],
+                "title": "Body_verify_identity_api_verify_identity_post"
+            },
+            "HTTPValidationError": {
+                "properties": {
+                    "detail": {
+                        "items": {
+                            "$ref": "#/components/schemas/ValidationError"
+                        },
+                        "type": "array",
+                        "title": "Detail"
+                    }
+                },
+                "type": "object",
+                "title": "HTTPValidationError"
+            },
+            "IdentityResponse": {
+                "properties": {
+                    "is_match": {
+                        "type": "boolean",
+                        "title": "Is Match"
+                    },
+                    "national_id": {
+                        "anyOf": [
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "title": "National Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "is_match",
+                    "national_id"
+                ],
+                "title": "IdentityResponse"
+            },
+            "ImageAnalysis": {
+                "properties": {
+                    "image_index": {
+                        "type": "integer",
+                        "title": "Image Index"
+                    },
+                    "resolution": {
+                        "type": "string",
+                        "title": "Resolution"
+                    },
+                    "authenticity": {
+                        "type": "string",
+                        "title": "Authenticity"
+                    },
+                    "ai_detection": {
+                        "type": "string",
+                        "title": "Ai Detection"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "image_index",
+                    "resolution",
+                    "authenticity",
+                    "ai_detection"
+                ],
+                "title": "ImageAnalysis"
+            },
+            "Notification": {
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "title": "Type"
+                    },
+                    "title": {
+                        "type": "string",
+                        "title": "Title"
+                    },
+                    "time": {
+                        "type": "string",
+                        "title": "Time"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "type",
+                    "title",
+                    "time"
+                ],
+                "title": "Notification"
+            },
+            "PropertyValidationResponse": {
+                "properties": {
+                    "ownership_verified": {
+                        "type": "boolean",
+                        "title": "Ownership Verified"
+                    },
+                    "image_forensics_flags": {
+                        "additionalProperties": true,
+                        "type": "object",
+                        "title": "Image Forensics Flags"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "ownership_verified",
+                    "image_forensics_flags"
+                ],
+                "title": "PropertyValidationResponse"
+            },
+            "RecommenderRequest": {
+                "properties": {
+                    "property_id": {
+                        "type": "string",
+                        "title": "Property Id"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "property_id"
+                ],
+                "title": "RecommenderRequest"
+            },
+            "RecommenderResponse": {
+                "properties": {
+                    "recommendations": {
+                        "items": {
+                            "additionalProperties": true,
+                            "type": "object"
+                        },
+                        "type": "array",
+                        "title": "Recommendations"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "recommendations"
+                ],
+                "title": "RecommenderResponse"
+            },
+            "Report": {
+                "properties": {
+                    "report_title": {
+                        "type": "string",
+                        "title": "Report Title"
+                    },
+                    "risk_level": {
+                        "type": "string",
+                        "title": "Risk Level"
+                    },
+                    "description": {
+                        "type": "string",
+                        "title": "Description"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "report_title",
+                    "risk_level",
+                    "description"
+                ],
+                "title": "Report"
+            },
+            "TrustScore": {
+                "properties": {
+                    "score": {
+                        "type": "integer",
+                        "title": "Score"
+                    },
+                    "label": {
+                        "type": "string",
+                        "title": "Label"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "score",
+                    "label"
+                ],
+                "title": "TrustScore"
+            },
+            "ValidationError": {
+                "properties": {
+                    "loc": {
+                        "items": {
+                            "anyOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                }
+                            ]
+                        },
+                        "type": "array",
+                        "title": "Location"
+                    },
+                    "msg": {
+                        "type": "string",
+                        "title": "Message"
+                    },
+                    "type": {
+                        "type": "string",
+                        "title": "Error Type"
+                    }
+                },
+                "type": "object",
+                "required": [
+                    "loc",
+                    "msg",
+                    "type"
+                ],
+                "title": "ValidationError"
+            }
+        }
+    }
+}

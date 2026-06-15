@@ -1,0 +1,22 @@
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.venv/
+.env
+
+# Large AI Model Weights (e.g. h5, onnx files)
+*.h5
+*.weights
+*.onnx
+*.pkl
+
+# OS / IDE Files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
