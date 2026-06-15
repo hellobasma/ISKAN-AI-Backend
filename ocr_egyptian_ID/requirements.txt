@@ -1,0 +1,10 @@
+streamlit
+pillow
+opencv-python
+numpy
+pytesseract
+ultralytics
+easyocr
+deepface
+retina-face
+tf-keras
