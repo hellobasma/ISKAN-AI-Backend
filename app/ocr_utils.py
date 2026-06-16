@@ -2,6 +2,13 @@ from ultralytics import YOLO
 import cv2
 import re
 import easyocr
+import os
+import uuid
+import tempfile
+
+# --- Secure Path Setup ---
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MODELS_DIR = os.path.join(BASE_DIR, 'models')
 
 # Initialize EasyOCR reader (this should be done once for efficiency)
 reader = easyocr.Reader(['ar'], gpu=False, verbose=False)
@@ -22,7 +29,7 @@ def extract_text(image, bbox, lang='ara'):
 
 # Function to detect national ID numbers in a cropped image
 def detect_national_id(cropped_image):
-    model = YOLO('models/detect_id.pt')  # Load the model directly in the function
+    model = YOLO(os.path.join(MODELS_DIR, 'detect_id.pt'))  # Load the model directly using secure path
     results = model(cropped_image)
     detected_info = []
 
@@ -57,8 +64,8 @@ def expand_bbox_height(bbox, scale=1.2, image_shape=None):
 
 # Function to process the cropped image
 def process_image(cropped_image):
-    # Load the trained YOLO model for objects (fields) detection
-    model = YOLO('models/detect_odjects.pt')
+    # Load the trained YOLO model for objects (fields) detection using secure path
+    model = YOLO(os.path.join(MODELS_DIR, 'detect_odjects.pt'))
     results = model(cropped_image)
 
     # Variables to store extracted values
@@ -72,7 +79,8 @@ def process_image(cropped_image):
 
     # Loop through the results
     for result in results:
-        output_path = 'd2.jpg'
+        # Use dynamic filename to avoid concurrency issues
+        output_path = os.path.join(tempfile.gettempdir(), f"result_{uuid.uuid4().hex}.jpg")
         result.save(output_path)
 
         for box in result.boxes:
@@ -94,9 +102,9 @@ def process_image(cropped_image):
                 cropped_nid = cropped_image[expanded_bbox[1]:expanded_bbox[3], expanded_bbox[0]:expanded_bbox[2]]
                 nid = detect_national_id(cropped_nid)
             elif class_name == 'photo':
-                # Crop and save the detected photo
+                # Crop and save the detected photo with a dynamic unique filename
                 cropped_photo = cropped_image[bbox[1]:bbox[3], bbox[0]:bbox[2]]
-                photo_path = 'extracted_id_photo.jpg'
+                photo_path = os.path.join(tempfile.gettempdir(), f"extracted_id_photo_{uuid.uuid4().hex}.jpg")
                 cv2.imwrite(photo_path, cropped_photo)
 
     merged_name = f"{first_name} {second_name}"
@@ -171,8 +179,8 @@ def decode_egyptian_id(id_number):
 
 # Function to detect the ID card and pass it to the existing code
 def detect_and_process_id_card(image_path):
-    # Load the ID card detection model
-    id_card_model = YOLO('models/detect_id_card.pt')
+    # Load the ID card detection model using secure path
+    id_card_model = YOLO(os.path.join(MODELS_DIR, 'detect_id_card.pt'))
 
     # Perform inference to detect the ID card
     id_card_results = id_card_model(image_path)

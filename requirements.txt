@@ -6,8 +6,12 @@ pandas
 scikit-learn
 ultralytics
 deepface
-easyocr
+easyocr==1.7.1
 opencv-python-headless
-numpy
-Pillow
-pypdfium2
+numpy==1.26.4
+Pillow==10.4.0
+pypdfium2==4.30.0
+streamlit
+pytesseract
+retina-face
+tf-keras

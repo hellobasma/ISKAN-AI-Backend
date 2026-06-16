@@ -10,7 +10,7 @@ complex backgrounds and low-resolution/grayscale photos common in Egyptian Natio
 
 import logging
 from deepface import DeepFace
-from utils import detect_and_process_id_card
+from app.ocr_utils import detect_and_process_id_card
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

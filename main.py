@@ -9,19 +9,12 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Add all AI subdirectories to sys.path
-base_dir = os.path.dirname(__file__)
-sys.path.append(os.path.join(base_dir, "Admin Oversight & Moderation AI Model"))
-sys.path.append(os.path.join(base_dir, "ocr_egyptian_ID"))
-sys.path.append(os.path.join(base_dir, "recommender_Model"))
-sys.path.append(os.path.join(base_dir, "Property_Validator_Model"))
+from app.recommender_service import get_similar_properties
+from app.ocr_service import verify_user_identity
+from app.property_service import PropertyValidator
+from app.admin_oversight_service import generate_dashboard_payload  # type: ignore
 
-# --- Actual AI Imports ---
-from recommender_Model.recommender import get_similar_properties
-from ocr_egyptian_ID.face_verification_pipeline import verify_user_identity
-from Property_Validator_Model.property_validator import PropertyValidator
 property_validator_instance = PropertyValidator()
-from admin_oversight_model import generate_dashboard_payload  # type: ignore
 
 app = FastAPI(title="ISKAN AI Microservice API Gateway")
 
