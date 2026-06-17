@@ -7,7 +7,7 @@ import pandas as pd
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field # تم إضافة Field هنا
 
 from app.recommender_service import get_similar_properties
 from app.ocr_service import verify_user_identity
@@ -37,11 +37,14 @@ properties_df = pd.DataFrame(mock_data)
 class RecommenderRequest(BaseModel):
     property_id: str
 
+# 1. حل مشكلة الربط مع C# باستخدام Alias
 class AdminOversightRequest(BaseModel):
-    # Changed to Dict[str, Any] so it accepts the raw complex JSONs directly from M2 and M3
-    m2_data: Dict[str, Any]
-    m3_data: Dict[str, Any]
-    listing_id: str
+    m2_data: Dict[str, Any] = Field(..., alias="M2Data")
+    m3_data: Dict[str, Any] = Field(..., alias="M3Data")
+    listing_id: str = Field(..., alias="ListingId")
+
+    class Config:
+        populate_by_name = True # يسمح للـ API بقراءة الطريقتين
 
 # --- Pydantic Models for Output Validation (Responses) ---
 class RecommenderResponse(BaseModel):
@@ -98,19 +101,25 @@ def save_upload_file_tmp(upload_file: UploadFile) -> str:
 @app.post("/api/recommend", response_model=RecommenderResponse)
 async def recommend(request: RecommenderRequest):
     try:
-        # Added the missing properties_df argument
         results = get_similar_properties(request.property_id, properties_df=properties_df)
         
-        # Handle string JSON just in case it wasn't modified in the AI file
         if isinstance(results, str):
             results = json.loads(results)
             
-        if isinstance(results, dict) and "similar_properties" in results:
-            return {"recommendations": results["similar_properties"]}
+        # --- التعديل الذكي لفك التغليف ---
+        if isinstance(results, dict):
+            if "similar_properties" in results:
+                return {"recommendations": results["similar_properties"]}
+            elif "recommendations" in results:
+                return {"recommendations": results["recommendations"]}
+                
+        # لو الداتا راجعة كلستة مباشرة
         return {"recommendations": results}
+        
     except Exception as e:
+        import traceback
+        traceback.print_exc() 
         raise HTTPException(status_code=500, detail=f"Recommender system failed: {str(e)}")
-
 @app.post("/api/verify-identity", response_model=IdentityResponse)
 async def verify_identity(
     id_image: UploadFile = File(...),
@@ -122,10 +131,8 @@ async def verify_identity(
         id_path = save_upload_file_tmp(id_image)
         selfie_path = save_upload_file_tmp(selfie_image)
         
-        # Added dummy user_form_data to satisfy the function arguments
         result = verify_user_identity(id_path, selfie_path, user_form_data={})
         
-        # Mapping the complex AI result to the simple IdentityResponse Pydantic model
         mapped_response = {
             "is_match": result.get("face_verification", {}).get("is_match", False),
             "national_id": result.get("extracted_identity", {}).get("national_id", None)
@@ -143,8 +150,12 @@ async def verify_identity(
 async def validate_property(
     contract_file: UploadFile = File(...),
     property_images: List[UploadFile] = File(...),
-    verified_owner_national_id: str = Form(...)
+    verified_owner_national_id: Optional[str] = Form(None) # السماح بكونه اختياري مبدئياً للتحكم في الإيرور
 ):
+    # 2. حماية ذكية ضد الـ Error 500
+    if not verified_owner_national_id or verified_owner_national_id.strip() == "":
+        raise HTTPException(status_code=400, detail="Owner national ID is required for AI property validation.")
+
     contract_path = None
     image_paths = []
     try:
@@ -154,7 +165,6 @@ async def validate_property(
             
         result = property_validator_instance.validate_property_listing(contract_path, image_paths, verified_owner_national_id)
         
-        # Mapping the complex AI result to the simple Pydantic model
         mapped_response = {
             "ownership_verified": result.get("document_analysis", {}).get("ownership_verified", False),
             "image_forensics_flags": {"flags": result.get("image_forensics", {}).get("flags", [])}
@@ -172,12 +182,53 @@ async def validate_property(
 @app.post("/api/admin-oversight", response_model=AdminOversightResponse)
 async def admin_oversight(request: AdminOversightRequest):
     try:
-        # Pydantic dict structure directly passed so logic can search inside it
+        # استدعاء الدالة الأصلية
         result = generate_dashboard_payload(
             request.m2_data, 
             request.m3_data, 
             request.listing_id
         )
+        
+        # 3. التدخل السريع لحساب Trust Score حقيقي بناءً على الداتا
+        calculated_score = 100
+        
+        # الخصم على عدم وجود صور
+        image_count = request.m2_data.get("image_count", 0)
+        if image_count == 0:
+            calculated_score -= 40
+        elif image_count < 3:
+            calculated_score -= 15
+            
+        # الخصم على عدم التوثيق
+        ver_status = request.m3_data.get("verification_status", "Unverified")
+        if ver_status != "Approved" and ver_status != "Verified":
+            calculated_score -= 30
+            
+        # ضمان إن السكور ميبقاش تحت الصفر
+        calculated_score = max(0, calculated_score)
+        
+        # تحديد التقييم
+        if calculated_score >= 80:
+            label = "Excellent"
+        elif calculated_score >= 50:
+            label = "Average"
+        else:
+            label = "Poor"
+            
+        # تحديث النتيجة بالسكور الحقيقي
+        result["owner_trust_score"] = {"score": calculated_score, "label": label}
+        
+        # تحديث الإشعارات لو العقار مشبوه
+        if calculated_score < 50:
+            result["dashboard_notifications"] = [
+                {"type": "Warning", "title": f"Listing {request.listing_id} needs manual review", "time": "Just now"}
+            ]
+            result["reports_and_complaints"] = {
+                "report_title": "Suspicious Listing Detected",
+                "risk_level": "High Priority",
+                "description": "This listing lacks sufficient images or is unverified."
+            }
+            
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Admin oversight failed: {str(e)}")
