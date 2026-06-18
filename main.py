@@ -107,6 +107,11 @@ class IdentityVerifyRequest(BaseModel):
     id_image_url: str
     selfie_image_url: str
 
+class PropertyValidateRequest(BaseModel):
+    contract_url: str
+    property_image_urls: List[str]
+    verified_owner_national_id: str
+
 
 # 1. حل مشكلة الربط مع C# باستخدام Alias
 class AdminOversightRequest(BaseModel):
@@ -157,15 +162,22 @@ class AdminOversightResponse(BaseModel):
     reports_and_complaints: Report
 
 # --- Helper function ---
-def save_upload_file_tmp(upload_file: UploadFile) -> str:
+def download_url_to_tmp(url: str) -> str:
+    """بتحمل الصورة من الرابط لملف مؤقت عشان الموديل يعرف يقراها"""
     try:
-        suffix = os.path.splitext(upload_file.filename)[1] if upload_file.filename else ""
+        response = requests.get(url, stream=True)
+        response.raise_for_status()
+        
+        # استخراج الامتداد من الرابط (عشان لو pdf أو jpg)
+        suffix = os.path.splitext(url.split('?')[0])[1] or ".jpg"
+        
         fd, path = tempfile.mkstemp(suffix=suffix)
         with os.fdopen(fd, 'wb') as f:
-            shutil.copyfileobj(upload_file.file, f)
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
         return path
-    finally:
-        upload_file.file.close()
+    except Exception as e:
+        raise ValueError(f"Failed to download file from {url}: {str(e)}")
 
 # --- API Endpoints ---
 
@@ -215,32 +227,44 @@ async def verify_identity(request: IdentityVerifyRequest):
         raise HTTPException(status_code=500, detail=f"Identity verification failed: {str(e)}")
 
 @app.post("/api/validate-property", response_model=PropertyValidationResponse)
-async def validate_property(
-    contract_file: UploadFile = File(...),
-    property_images: List[UploadFile] = File(...),
-    verified_owner_national_id: Optional[str] = Form(None) # السماح بكونه اختياري مبدئياً للتحكم في الإيرور
-):
-    # 2. حماية ذكية ضد الـ Error 500
-    if not verified_owner_national_id or verified_owner_national_id.strip() == "":
+async def validate_property(request: PropertyValidateRequest):
+    # 1. التأكد من وجود الرقم القومي
+    if not request.verified_owner_national_id or str(request.verified_owner_national_id).strip() == "":
         raise HTTPException(status_code=400, detail="Owner national ID is required for AI property validation.")
 
     contract_path = None
     image_paths = []
     try:
-        contract_path = save_upload_file_tmp(contract_file)
-        for img in property_images:
-            image_paths.append(save_upload_file_tmp(img))
+        # 2. تحميل العقد من الرابط
+        contract_path = download_url_to_tmp(request.contract_url)
+        
+        # 3. تحميل كل صور العقار من الروابط
+        for img_url in request.property_image_urls:
+            image_paths.append(download_url_to_tmp(img_url))
             
-        result = property_validator_instance.validate_property_listing(contract_path, image_paths, verified_owner_national_id)
+        # 4. تشغيل موديل الذكاء الاصطناعي
+        result = property_validator_instance.validate_property_listing(
+            contract_path, 
+            image_paths, 
+            request.verified_owner_national_id
+        )
         
         mapped_response = {
             "ownership_verified": result.get("document_analysis", {}).get("ownership_verified", False),
             "image_forensics_flags": {"flags": result.get("image_forensics", {}).get("flags", [])}
         }
         return mapped_response
+        
+    except ValueError as ve:
+        # لو في رابط بايظ أو مش شغال، نبلغ الباك إند فوراً بـ 400 بدل ما السيرفر يقع
+        raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Property validation failed: {str(e)}")
+        
     finally:
+        # 5. التنظيف الشامل للملفات المؤقتة عشان مساحة السيرفر
         if contract_path and os.path.exists(contract_path):
             os.remove(contract_path)
         for path in image_paths:
