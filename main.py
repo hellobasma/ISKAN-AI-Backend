@@ -102,6 +102,12 @@ properties_df = load_properties_from_backend()
 class RecommenderRequest(BaseModel):
     property_id: str
 
+
+class IdentityVerifyRequest(BaseModel):
+    id_image_url: str
+    selfie_image_url: str
+
+
 # 1. حل مشكلة الربط مع C# باستخدام Alias
 class AdminOversightRequest(BaseModel):
     m2_data: Dict[str, Any] = Field(..., alias="M2Data")
@@ -187,47 +193,26 @@ async def recommend(request: RecommenderRequest):
         raise HTTPException(status_code=500, detail=f"Recommender system failed: {str(e)}")
 
 @app.post("/api/verify-identity", response_model=IdentityResponse)
-async def verify_identity(
-    id_image: UploadFile = File(...),
-    selfie_image: UploadFile = File(...)
-):
-    id_path = None
-    selfie_path = None
+async def verify_identity(request: IdentityVerifyRequest):
     try:
-        id_path = save_upload_file_tmp(id_image)
-        selfie_path = save_upload_file_tmp(selfie_image)
+        # الموديل بتاعك هيستقبل الروابط مباشرة
+        result = verify_user_identity(
+            id_path=request.id_image_url, 
+            selfie_path=request.selfie_image_url, 
+            user_form_data={}
+        )
         
-        # استدعاء موديل الـ AI
-        result = verify_user_identity(id_path, selfie_path, user_form_data={})
-        
-        # استخراج الرقم القومي
         national_id = result.get("extracted_identity", {}).get("national_id", None)
         
-        # 🛡️ الحارس الذكي: التأكد من أن الصورة المرفوعة هي بطاقة رقم قومي بالفعل
         if not national_id or str(national_id).strip() == "":
-            raise HTTPException(
-                status_code=400, 
-                detail="Invalid ID card image. Please upload a valid National ID card where text is clear."
-            )
-        
-        mapped_response = {
+            raise HTTPException(status_code=400, detail="Could not extract ID from provided URL.")
+            
+        return {
             "is_match": result.get("face_verification", {}).get("is_match", False),
             "national_id": national_id
         }
-        return mapped_response
-        
-    except HTTPException as http_exc:
-        # عشان يمرر الـ 400 اللي إحنا عملناها من غير ما يتدخل
-        raise http_exc
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Identity verification failed: {str(e)}")
-    finally:
-        if id_path and os.path.exists(id_path):
-            os.remove(id_path)
-        if selfie_path and os.path.exists(selfie_path):
-            os.remove(selfie_path)
 
 @app.post("/api/validate-property", response_model=PropertyValidationResponse)
 async def validate_property(
