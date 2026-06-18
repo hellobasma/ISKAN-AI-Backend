@@ -40,19 +40,22 @@ def get_similar_properties(target_property_id, properties_df, top_n=4):
     analysis_df = pd.concat([pd.DataFrame([target_prop]), candidates_df]).reset_index(drop=True)
     
     # 3. Feature Engineering
-    # Define features for the model
-    categorical_features = ['location', 'property_type']
+    # غيرنا 'location' لـ 'location_clean' عشان الموديل يستخدم الداتا النضيفة
+    categorical_features = ['location_clean', 'property_type'] 
     numerical_features = ['price_val', 'bedrooms', 'area_val']
+    
+    # 💡 التعديل هنا: نستخدم نسخة نظيفة من الداتا للموديل بس
+    model_df = analysis_df[categorical_features + numerical_features].copy()
     
     # Scale numerical features (Min-Max Scaling)
     scaler = MinMaxScaler()
-    num_scaled = scaler.fit_transform(analysis_df[numerical_features])
-    num_scaled_df = pd.DataFrame(num_scaled, columns=numerical_features)
+    num_scaled = scaler.fit_transform(model_df[numerical_features])
+    num_scaled_df = pd.DataFrame(num_scaled, columns=numerical_features, index=model_df.index)
     
     # One-hot encode categorical features
     encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-    cat_encoded = encoder.fit_transform(analysis_df[categorical_features])
-    cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_features))
+    cat_encoded = encoder.fit_transform(model_df[categorical_features])
+    cat_encoded_df = pd.DataFrame(cat_encoded, columns=encoder.get_feature_names_out(categorical_features), index=model_df.index)
     
     # Combine engineered features
     features_df = pd.concat([num_scaled_df, cat_encoded_df], axis=1)
@@ -60,16 +63,16 @@ def get_similar_properties(target_property_id, properties_df, top_n=4):
     # 4. Apply Feature Weights
     # "Ensure that 'Location', 'Property Type', and 'Price' have a higher impact"
     weights = {
-        'price_val': 3.0,
+        'price_val': 1.0,  # قللي السعر شوية
         'bedrooms': 1.0,
         'area_val': 1.0,
     }
     
     for col in features_df.columns:
         if col.startswith('location_'):
-            features_df[col] *= 3.0  # Higher weight for location
+            features_df[col] *= 5.0  # 👈 علي الويت بتاع المكان لـ 5 عشان يركز على المدينة
         elif col.startswith('property_type_'):
-            features_df[col] *= 3.0  # Higher weight for property type
+            features_df[col] *= 2.0  # الويت بتاع النوع 2
         elif col in weights:
             features_df[col] *= weights[col]
             
@@ -84,6 +87,10 @@ def get_similar_properties(target_property_id, properties_df, top_n=4):
     # 6. Sort and Select Top N
     candidates_df['similarity'] = similarities
     top_matches = candidates_df.sort_values(by='similarity', ascending=False).head(top_n)
+    
+    # 👈 ضيفي السطر ده عشان نشوف في الـ Terminal هو شايف إيه بالظبط
+    print("Top Matches found:")
+    print(top_matches[['property_id', 'similarity', 'location_clean']].to_string())
     
     # 7. Format Output as JSON (exclude similarity scores/percentages)
     results = []

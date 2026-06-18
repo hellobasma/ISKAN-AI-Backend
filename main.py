@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import json
 import pandas as pd
+import requests
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,12 +27,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Dummy Database for M1 (To prevent crashes until real DB is linked) ---
-mock_data = [
-    {"property_id": "1045", "title": "Apartment in Tanta", "location": "Tanta", "property_type": "Apartment", "price_val": 1200000, "price_display": "1,200,000 EGP", "bedrooms": 3, "area_val": 120, "area_display": "120 sqm", "thumbnail_url": "/images/prop_1045.jpg"},
-    {"property_id": "890", "title": "Apartment in Tanta", "location": "Tanta", "property_type": "Apartment", "price_val": 1150000, "price_display": "1,150,000 EGP", "bedrooms": 3, "area_val": 115, "area_display": "115 sqm", "thumbnail_url": "/images/prop_890.jpg"}
-]
-properties_df = pd.DataFrame(mock_data)
+# --- Real Database Connection (Fetching from C# API) ---
+def load_properties_from_backend():
+    backend_url = "https://isskan-1.runasp.net/api/Property/GetAll?PageIndex=1&PageSize=1000" 
+    
+    try:
+        response = requests.get(backend_url)
+        
+        if response.status_code == 200:
+            json_response = response.json()
+            properties_list = json_response.get("data", [])
+            df = pd.DataFrame(properties_list)
+            
+            if not df.empty:
+                # 1. تغيير الأسماء (قاموس الترجمة الشامل)
+                df = df.rename(columns={
+                    "id": "property_id",            
+                    "pricePerMonth": "price_val",   
+                    "propertyType": "property_type", 
+                    "address": "location",           
+                    "bedroomsNumber": "bedrooms",   
+                    "bathroomsNumber": "bathrooms", 
+                    "roomsNumber": "rooms",
+                    "mainImageUrl": "thumbnail_url"  # 👈 اللمسة الأخيرة للصورة
+                })
+                
+                # 2. قيم افتراضية للحاجات الناقصة عشان الموديل ميزعلش
+                if 'area_val' not in df.columns:
+                    df['area_val'] = 100 
+                if 'thumbnail_url' not in df.columns:
+                    df['thumbnail_url'] = ""
+                    
+                # 🧹 تنظيف الداتا: استخراج اسم المدينة من العنوان عشان الموديل يفهم
+                if 'location' in df.columns:
+                    df['location'] = df['location'].astype(str)
+                    # السطر اللي بيستخرج المنطقة
+                    df['location_clean'] = df['location'].apply(lambda x: " ".join(x.split(',')[-2:]).strip() if ',' in x else x)
+    
+                    # 💡 حطي السطر ده هنا فوراً عشان يضمن إن مفيش قيم فاضية
+                    df['location_clean'] = df['location_clean'].replace('', 'Unknown')
+
+                if 'property_type' in df.columns:
+                    # تحويل الأصفار لكلمة Room عشان تتوحد مع الداتا
+                    df['property_type'] = df['property_type'].astype(str).replace('0', 'Room')
+
+                # 4. تنظيف البيانات الرقمية
+                numeric_cols = ['price_val', 'bedrooms', 'bathrooms', 'rooms']
+                for col in numeric_cols:
+                    if col in df.columns:
+                        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                
+                # 🚫 فلترة حاسمة: طرد أي عقار سعره معدي الـ 50 ألف عشان ميبوظش الموديل
+                df = df[df['price_val'] < 50000]
+                    
+                # 5. تجهيز العرض النهائي للـ JSON
+                if 'price_val' in df.columns:
+                    df['price_display'] = df['price_val'].astype(int).astype(str)
+                if 'area_val' in df.columns:
+                    df['area_display'] = df['area_val'].astype(int).astype(str) + " m²"
+
+            print(f"✅ Successfully loaded {len(df)} properties for recommendation.")
+            return df
+        else:
+            print(f"❌ Failed to fetch data. Status Code: {response.status_code}")
+            return pd.DataFrame()
+            
+    except Exception as e:
+        print(f"❌ Error connecting to backend API: {e}")
+        return pd.DataFrame()
+
+properties_df = load_properties_from_backend()
 
 # --- Pydantic Models for Data Validation ---
 class RecommenderRequest(BaseModel):
@@ -120,6 +185,7 @@ async def recommend(request: RecommenderRequest):
         import traceback
         traceback.print_exc() 
         raise HTTPException(status_code=500, detail=f"Recommender system failed: {str(e)}")
+
 @app.post("/api/verify-identity", response_model=IdentityResponse)
 async def verify_identity(
     id_image: UploadFile = File(...),
@@ -131,14 +197,31 @@ async def verify_identity(
         id_path = save_upload_file_tmp(id_image)
         selfie_path = save_upload_file_tmp(selfie_image)
         
+        # استدعاء موديل الـ AI
         result = verify_user_identity(id_path, selfie_path, user_form_data={})
+        
+        # استخراج الرقم القومي
+        national_id = result.get("extracted_identity", {}).get("national_id", None)
+        
+        # 🛡️ الحارس الذكي: التأكد من أن الصورة المرفوعة هي بطاقة رقم قومي بالفعل
+        if not national_id or str(national_id).strip() == "":
+            raise HTTPException(
+                status_code=400, 
+                detail="Invalid ID card image. Please upload a valid National ID card where text is clear."
+            )
         
         mapped_response = {
             "is_match": result.get("face_verification", {}).get("is_match", False),
-            "national_id": result.get("extracted_identity", {}).get("national_id", None)
+            "national_id": national_id
         }
         return mapped_response
+        
+    except HTTPException as http_exc:
+        # عشان يمرر الـ 400 اللي إحنا عملناها من غير ما يتدخل
+        raise http_exc
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Identity verification failed: {str(e)}")
     finally:
         if id_path and os.path.exists(id_path):
