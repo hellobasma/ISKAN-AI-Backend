@@ -38,6 +38,10 @@ def load_properties_from_backend():
             json_response = response.json()
             properties_list = json_response.get("data", [])
             df = pd.DataFrame(properties_list)
+
+            if not df.empty:
+                # 💡 السطر السحري: هنحفظ الداتا الأصلية بتاعت الباك إند زي ما هي بالظبط
+                df['raw_data'] = properties_list
             
             if not df.empty:
                 # 1. تغيير الأسماء (قاموس الترجمة الشامل)

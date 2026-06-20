@@ -28,9 +28,9 @@ def get_similar_properties(target_property_id, properties_df, top_n=4):
     candidates_df = properties_df[properties_df['property_id'] != target_property_id].copy()
     
     # Filter by price (+/- 20% limit)
-    min_price = target_price * 0.80
-    max_price = target_price * 1.20
-    candidates_df = candidates_df[(candidates_df['price_val'] >= min_price) & (candidates_df['price_val'] <= max_price)]
+    # min_price = target_price * 0.80
+    # max_price = target_price * 1.20
+    # candidates_df = candidates_df[(candidates_df['price_val'] >= min_price) & (candidates_df['price_val'] <= max_price)]
     
     if candidates_df.empty:
         return json.dumps({"similar_properties": []})
@@ -91,20 +91,15 @@ def get_similar_properties(target_property_id, properties_df, top_n=4):
     # 👈 ضيفي السطر ده عشان نشوف في الـ Terminal هو شايف إيه بالظبط
     print("Top Matches found:")
     print(top_matches[['property_id', 'similarity', 'location_clean']].to_string())
-    
-    # 7. Format Output as JSON (exclude similarity scores/percentages)
+
+    # 7. Format Output as JSON (Return the exact backend structure)
     results = []
     for _, row in top_matches.iterrows():
-        results.append({
-            "property_id": str(row['property_id']),
-            "title": row['title'],
-            "price": row['price_display'],
-            "bedrooms": int(row['bedrooms']),
-            "area": row['area_display'],
-            "thumbnail_url": row['thumbnail_url']
-        })
+        # 💡 نرجع الأوبجكت الأصلي اللي الباك إند متوقعه بكل تفاصيله (id, facilities, الخ)
+        results.append(row['raw_data'])
         
     return {"recommendations": results}
+    
 
 if __name__ == "__main__":
     # 1. Data Architecture (Mock Data Definition)
