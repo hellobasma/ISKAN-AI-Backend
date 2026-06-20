@@ -15,9 +15,13 @@ from app.ocr_service import verify_user_identity
 from app.property_service import PropertyValidator
 from app.admin_oversight_service import generate_dashboard_payload  # type: ignore
 
-property_validator_instance = PropertyValidator()
+property_validator_instance = None
 
 app = FastAPI(title="ISKAN AI Microservice API Gateway")
+
+@app.get("/")
+def read_root():
+    return {"message": "ISKAN AI Microservices Gateway is running successfully!"}
 
 app.add_middleware(
     CORSMiddleware,
@@ -100,7 +104,7 @@ def load_properties_from_backend():
         print(f"❌ Error connecting to backend API: {e}")
         return pd.DataFrame()
 
-properties_df = load_properties_from_backend()
+properties_df = None
 
 # --- Pydantic Models for Data Validation ---
 class RecommenderRequest(BaseModel):
@@ -187,11 +191,15 @@ def download_url_to_tmp(url: str) -> str:
 
 @app.post("/api/recommend", response_model=RecommenderResponse)
 async def recommend(request: RecommenderRequest):
+    global properties_df
+    
     try:
+        # 💡 السحب الذكي: لو الداتا لسه متسحبتش، اسحبها دلوقتي
+        if properties_df is None or properties_df.empty:
+            print("Waking up backend and fetching properties...")
+            properties_df = load_properties_from_backend()
+            
         results = get_similar_properties(request.property_id, properties_df=properties_df)
-        
-        if isinstance(results, str):
-            results = json.loads(results)
             
         # --- التعديل الذكي لفك التغليف ---
         if isinstance(results, dict):
@@ -232,6 +240,13 @@ async def verify_identity(request: IdentityVerifyRequest):
 
 @app.post("/api/validate-property", response_model=PropertyValidationResponse)
 async def validate_property(request: PropertyValidateRequest):
+    # 💡 السطرين دول هما اللي كانوا ناقصين عشان الموديل يتحمل وقت الطلب
+    global property_validator_instance
+    if property_validator_instance is None:
+        print("Lazy Loading: Initializing PropertyValidator for the first time...")
+        from app.property_service import PropertyValidator
+        property_validator_instance = PropertyValidator()
+
     # 1. التأكد من وجود الرقم القومي
     if not request.verified_owner_national_id or str(request.verified_owner_national_id).strip() == "":
         raise HTTPException(status_code=400, detail="Owner national ID is required for AI property validation.")
@@ -274,7 +289,6 @@ async def validate_property(request: PropertyValidateRequest):
         for path in image_paths:
             if path and os.path.exists(path):
                 os.remove(path)
-
 @app.post("/api/admin-oversight", response_model=AdminOversightResponse)
 async def admin_oversight(request: AdminOversightRequest):
     try:
